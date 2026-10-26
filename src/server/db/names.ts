@@ -1,0 +1,16 @@
+export const COLLECTION_NAMES = {
+  users: "users",
+  settings: "settings",
+  accountExecutives: "account_executives",
+  accounts: "accounts",
+  contacts: "contacts",
+  opportunities: "opportunities",
+  workloads: "workloads",
+  notes: "sa_notes",
+  noteRevisions: "note_revisions",
+  actionItems: "action_items",
+  history: "account_change_history",
+  meetings: "meetings",
+  meetingAnalyses: "meeting_analyses",
+  aiJobs: "ai_processing_jobs",
+} as const;

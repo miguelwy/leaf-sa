@@ -1,0 +1,228 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * SA Workspace design tokens.
+ * Neutral greyscale surfaces + one green brand accent + semantic status colours.
+ * Every token has a light and a dark value; components only reference tokens.
+ */
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-heading: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-subtle: var(--brand-subtle);
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-warning: var(--warning);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+  --color-danger-subtle: var(--danger-subtle);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --radius: 0.625rem;
+
+  --background: oklch(0.99 0.002 160);
+  --foreground: oklch(0.18 0.01 250);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.01 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.01 250);
+  --primary: oklch(0.22 0.012 250);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.965 0.003 250);
+  --secondary-foreground: oklch(0.22 0.012 250);
+  --muted: oklch(0.965 0.003 250);
+  --muted-foreground: oklch(0.52 0.012 250);
+  --accent: oklch(0.955 0.004 250);
+  --accent-foreground: oklch(0.22 0.012 250);
+  --destructive: oklch(0.577 0.215 27);
+  --border: oklch(0.915 0.004 250);
+  --input: oklch(0.905 0.004 250);
+  --ring: oklch(0.62 0.13 160);
+
+  --brand: oklch(0.56 0.13 158);
+  --brand-foreground: oklch(0.99 0 0);
+  --brand-subtle: oklch(0.955 0.03 160);
+  --success: oklch(0.55 0.13 152);
+  --success-subtle: oklch(0.955 0.035 152);
+  --warning: oklch(0.62 0.15 70);
+  --warning-subtle: oklch(0.965 0.04 85);
+  --info: oklch(0.55 0.15 250);
+  --info-subtle: oklch(0.955 0.025 250);
+  --danger-subtle: oklch(0.96 0.025 25);
+
+  --chart-1: oklch(0.56 0.13 158);
+  --chart-2: oklch(0.55 0.15 250);
+  --chart-3: oklch(0.65 0.15 70);
+  --chart-4: oklch(0.58 0.17 310);
+  --chart-5: oklch(0.6 0.02 250);
+
+  --sidebar: oklch(0.975 0.003 250);
+  --sidebar-foreground: oklch(0.3 0.012 250);
+  --sidebar-primary: oklch(0.56 0.13 158);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.93 0.005 250);
+  --sidebar-accent-foreground: oklch(0.18 0.01 250);
+  --sidebar-border: oklch(0.915 0.004 250);
+  --sidebar-ring: oklch(0.62 0.13 160);
+}
+
+.dark {
+  --background: oklch(0.16 0.006 250);
+  --foreground: oklch(0.95 0.003 250);
+  --card: oklch(0.195 0.007 250);
+  --card-foreground: oklch(0.95 0.003 250);
+  --popover: oklch(0.21 0.008 250);
+  --popover-foreground: oklch(0.95 0.003 250);
+  --primary: oklch(0.93 0.004 250);
+  --primary-foreground: oklch(0.2 0.01 250);
+  --secondary: oklch(0.25 0.008 250);
+  --secondary-foreground: oklch(0.95 0.003 250);
+  --muted: oklch(0.24 0.008 250);
+  --muted-foreground: oklch(0.68 0.01 250);
+  --accent: oklch(0.26 0.009 250);
+  --accent-foreground: oklch(0.95 0.003 250);
+  --destructive: oklch(0.68 0.19 25);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.68 0.13 160);
+
+  --brand: oklch(0.72 0.14 158);
+  --brand-foreground: oklch(0.18 0.02 160);
+  --brand-subtle: oklch(0.28 0.045 160);
+  --success: oklch(0.72 0.14 152);
+  --success-subtle: oklch(0.27 0.045 152);
+  --warning: oklch(0.78 0.14 75);
+  --warning-subtle: oklch(0.29 0.05 75);
+  --info: oklch(0.72 0.12 250);
+  --info-subtle: oklch(0.27 0.045 250);
+  --danger-subtle: oklch(0.28 0.06 25);
+
+  --chart-1: oklch(0.72 0.14 158);
+  --chart-2: oklch(0.72 0.12 250);
+  --chart-3: oklch(0.78 0.14 75);
+  --chart-4: oklch(0.72 0.15 310);
+  --chart-5: oklch(0.6 0.02 250);
+
+  --sidebar: oklch(0.18 0.007 250);
+  --sidebar-foreground: oklch(0.82 0.006 250);
+  --sidebar-primary: oklch(0.72 0.14 158);
+  --sidebar-primary-foreground: oklch(0.18 0.02 160);
+  --sidebar-accent: oklch(0.25 0.008 250);
+  --sidebar-accent-foreground: oklch(0.96 0.003 250);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.68 0.13 160);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    font-feature-settings: "cv11", "ss01";
+  }
+  body {
+    @apply bg-background text-foreground text-sm antialiased;
+  }
+}
+
+/* Markdown rendering for SA notes and discovery text. */
+@layer components {
+  .prose-sa {
+    @apply text-sm leading-relaxed text-foreground;
+  }
+  .prose-sa > * + * {
+    @apply mt-3;
+  }
+  .prose-sa h1 {
+    @apply text-lg font-semibold tracking-tight;
+  }
+  .prose-sa h2 {
+    @apply text-base font-semibold tracking-tight;
+  }
+  .prose-sa h3 {
+    @apply text-sm font-semibold;
+  }
+  .prose-sa a {
+    @apply text-brand underline underline-offset-2;
+  }
+  .prose-sa ul {
+    @apply list-disc pl-5 space-y-1;
+  }
+  .prose-sa ol {
+    @apply list-decimal pl-5 space-y-1;
+  }
+  .prose-sa blockquote {
+    @apply border-l-2 border-border pl-3 text-muted-foreground;
+  }
+  .prose-sa code {
+    @apply rounded bg-muted px-1 py-0.5 font-mono text-[0.85em];
+  }
+  .prose-sa pre {
+    @apply overflow-x-auto rounded-lg border bg-muted/60 p-3 font-mono text-xs leading-relaxed;
+  }
+  .prose-sa pre code {
+    @apply bg-transparent p-0;
+  }
+  .prose-sa table {
+    @apply w-full border-collapse text-xs;
+  }
+  .prose-sa th,
+  .prose-sa td {
+    @apply border border-border px-2 py-1 text-left;
+  }
+  .prose-sa hr {
+    @apply border-border;
+  }
+}
