@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, FileX, MoreHorizontal, Pencil, RefreshCw, Sparkles, Trash2, Upload, Users } from "lucide-react";
+import { AlertTriangle, ClipboardList, FileX, MoreHorizontal, Pencil, RefreshCw, Sparkles, Trash2, Upload, Users } from "lucide-react";
 import { CHANGE_TYPE_LABELS, type Meeting, type MeetingAnalysis } from "@/domain/meetings";
 import { api } from "@/lib/api";
 import { useApiAction } from "@/hooks/use-api-action";
@@ -22,6 +22,7 @@ import { LocalDateTime } from "@/components/common/local-time";
 import { Markdown } from "@/components/common/markdown";
 import { useReferenceData } from "@/components/common/reference-data";
 import { AddTranscriptPanel } from "./add-transcript-panel";
+import { ExternalAnalysisDialog } from "./external-analysis-dialog";
 import { AnalysisPoller } from "./analysis-poller";
 import { EditMeetingDialog } from "./edit-meeting-dialog";
 import { AnalysisStatusPill } from "./meetings-table";
@@ -122,13 +123,18 @@ export function MeetingWorkspace({
         </div>
         <div className="flex items-center gap-1.5">
           {canAnalyze && (
-            <Button
-              size="sm"
-              variant={analysis ? "outline" : "default"}
-              disabled={pending || !ai.ready}
-              title={ai.ready ? undefined : (ai.reason ?? undefined)}
-              onClick={analyze}
-            >
+            <ExternalAnalysisDialog
+              meetingId={meeting.id}
+              hasTranscript={!!meeting.transcript}
+              trigger={
+                <Button size="sm" variant={analysis || ai.ready ? "outline" : "default"}>
+                  <ClipboardList className="size-3.5" /> {analysis ? "Re-import from Glean" : "Analyze with Glean"}
+                </Button>
+              }
+            />
+          )}
+          {canAnalyze && ai.ready && (
+            <Button size="sm" variant={analysis ? "outline" : "default"} disabled={pending} onClick={analyze}>
               {analysis ? <RefreshCw className="size-3.5" /> : <Sparkles className="size-3.5" />}
               {analysis ? "Re-analyze" : "Analyze with AI"}
             </Button>
@@ -235,11 +241,22 @@ export function MeetingWorkspace({
                   title="Not analyzed yet"
                   description="Run the analysis to get a summary, insights and suggested account updates. Nothing changes until you approve."
                   action={
-                    ai.ready ? (
-                      <Button size="sm" onClick={analyze} disabled={pending}>
-                        <Sparkles className="size-3.5" /> Analyze with AI
-                      </Button>
-                    ) : undefined
+                    <div className="flex flex-wrap justify-center gap-2">
+                      <ExternalAnalysisDialog
+                        meetingId={meeting.id}
+                        hasTranscript={!!meeting.transcript}
+                        trigger={
+                          <Button size="sm" variant={ai.ready ? "outline" : "default"}>
+                            <ClipboardList className="size-3.5" /> Analyze with Glean
+                          </Button>
+                        }
+                      />
+                      {ai.ready && (
+                        <Button size="sm" onClick={analyze} disabled={pending}>
+                          <Sparkles className="size-3.5" /> Analyze with AI
+                        </Button>
+                      )}
+                    </div>
                   }
                 />
               )
@@ -291,7 +308,9 @@ export function MeetingWorkspace({
                 </Panel>
 
                 <p className="text-[11px] text-muted-foreground">
-                  Analyzed <LocalDateTime value={analysis.createdAt} /> · {analysis.provider} · {analysis.model} · {analysis.promptVersion}
+                  {analysis.provider === "import" ? `Imported from ${analysis.model} ` : "Analyzed "}
+                  <LocalDateTime value={analysis.createdAt} />
+                  {analysis.provider !== "import" && ` · ${analysis.provider} · ${analysis.model}`} · {analysis.promptVersion}
                   {job?.usage && ` · ${(job.usage.inputTokens + job.usage.cacheReadTokens).toLocaleString()} in / ${job.usage.outputTokens.toLocaleString()} out tokens`}
                   {job?.costUsd !== null && job?.costUsd !== undefined && ` · ~$${job.costUsd.toFixed(3)}`}
                   {job?.durationMs && ` · ${Math.round(job.durationMs / 1000)}s`}

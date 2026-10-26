@@ -145,7 +145,7 @@ export function NewMeetingDialog({
           required
           allowEmpty={false}
           disabled={!!accountId}
-          placeholder="Select an account"
+          placeholder={accounts.length ? "Select an account" : "No accounts yet — create one first"}
           options={accounts.map((a) => ({ value: a.id, label: a.name }))}
         />
         <SelectField

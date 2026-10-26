@@ -7,6 +7,7 @@ import type { EnumerationKind, Enumerations } from "@/domain/enumerations";
 import {
   CLASSIFICATION_LABELS,
   meetingAnalysisOutputSchema,
+  type AiProviderName,
   type ClassificationField,
   type MeetingAnalysis,
   type MeetingAnalysisOutput,
@@ -80,7 +81,7 @@ function evidenceOf(raw: string, ev: { excerpt: string; speaker: string | null }
 // Context
 // ---------------------------------------------------------------------------
 
-interface AnalysisData {
+export interface AnalysisData {
   meeting: MeetingDoc;
   account: AccountDoc;
   opportunities: OpportunityDoc[];
@@ -88,7 +89,7 @@ interface AnalysisData {
   enums: Enumerations;
 }
 
-async function loadAnalysisData(meeting: MeetingDoc): Promise<AnalysisData> {
+export async function loadAnalysisData(meeting: MeetingDoc): Promise<AnalysisData> {
   const c = await collections();
   const [account, opportunities, contacts, enums] = await Promise.all([
     c.accounts.findOne({ _id: meeting.accountId }),
@@ -102,7 +103,7 @@ async function loadAnalysisData(meeting: MeetingDoc): Promise<AnalysisData> {
 
 const clip = (s: string, n = 400) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
-async function buildContext(data: AnalysisData, transcript: string): Promise<MeetingContextInput> {
+export async function buildContext(data: AnalysisData, transcript: string): Promise<MeetingContextInput> {
   const c = await collections();
   const { meeting, account, opportunities, enums } = data;
 
@@ -455,7 +456,7 @@ export async function runMeetingAnalysis(jobId: string): Promise<void> {
     const data = await loadAnalysisData(meeting);
     const transcriptForAi = settings.redactContactDetails ? redactContactDetails(meeting.transcript.raw) : meeting.transcript.raw;
     const prompt = buildMeetingAnalysisPrompt(await buildContext(data, transcriptForAi));
-    const provider = await getProvider(job.provider);
+    const provider = await getProvider(job.provider as AiProviderName);
 
     let result: StructuredResult<MeetingAnalysisOutput> | null = null;
     let lastError: unknown = null;
