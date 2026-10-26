@@ -60,6 +60,16 @@ npm run dev
 
 Open http://localhost:3000. On first run you are redirected to **/setup** to create the owner account.
 
+### Meeting analysis without an API key (Glean or another internal assistant)
+
+1. Create the meeting with its transcript.
+2. On the meeting, click **Analyze with Glean** → **Copy prompt** (or *Download .txt*). The prompt carries the
+   rules, this account's current profile with the ids needed to match updates, and the exact JSON format.
+   Uncheck *Include the transcript* if the assistant limits message size, and attach the transcript there instead.
+3. Run it in a new Glean chat, copy the whole answer, paste it in step 3 of the dialog and **Import and review**.
+   The app extracts the JSON (fences and surrounding text are fine), validates it, and shows the same review
+   screen as a built-in analysis. Nothing is called from the app.
+
 ### Enabling meeting analysis
 
 1. Add `ANTHROPIC_API_KEY=...` (or `OPENAI_API_KEY` + a model) to `.env.local` and restart `npm run dev`.

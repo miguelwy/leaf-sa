@@ -141,7 +141,7 @@ const VALIDATORS: Record<string, Document> = {
       meetingId: objectId,
       accountId: objectId,
       jobId: objectId,
-      provider: { enum: ["anthropic", "openai"] },
+      provider: { enum: ["anthropic", "openai", "import"] },
       suggestions: { bsonType: "array" },
       createdAt: date,
     },

@@ -53,6 +53,35 @@ export interface MeetingContextInput {
   transcript: string;
 }
 
+/**
+ * Self-contained prompt for an external assistant (e.g. Glean) that has no API-level
+ * structured output: rules + account context + transcript + JSON Schema, asking for raw JSON.
+ * The result is pasted back into the app and goes through the same validation and review.
+ */
+export function buildExternalAnalysisPrompt(ctx: MeetingContextInput, jsonSchema: unknown, includeTranscript: boolean): string {
+  const context = buildMeetingAnalysisPrompt({
+    ...ctx,
+    transcript: includeTranscript ? ctx.transcript : "[The meeting transcript is attached to this conversation as a separate file or message. Use it as the transcript.]",
+  }).replace(/\nAnalyze the transcript above following the rules, and return the structured result\.$/, "");
+  return `# Task
+${MEETING_ANALYSIS_SYSTEM}
+
+# Input
+${context}
+
+# Output format
+Return ONE JSON object and nothing else: no markdown fences, no comments, no text before or after it.
+It must validate against this JSON Schema (all keys are required; use null or [] when there is nothing to report):
+
+${JSON.stringify(jsonSchema)}
+
+Reminders:
+- "excerpt" values must be copied character-for-character from the transcript.
+- Use only ids that appear in <opportunities> and <current_profile>; otherwise use null.
+- Use only configured values from <configured_values> for classifications, capabilities and personas.
+- Do not invent anything that was not said in the meeting.`;
+}
+
 export function buildMeetingAnalysisPrompt(ctx: MeetingContextInput): string {
   const json = (v: unknown) => JSON.stringify(v, null, 1);
   return `<meeting>

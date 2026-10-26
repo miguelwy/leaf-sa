@@ -4,6 +4,7 @@ import type { ActionItemStatus, Enumerations, SolutionFitStatus } from "@/domain
 import type { FieldChange, HistoryEntityType } from "@/domain/entities";
 import type {
   AiProviderName,
+  AnalysisSource,
   AnalysisStatus,
   MeetingAnalysisOutput,
   Suggestion,
@@ -225,7 +226,7 @@ export interface MeetingAnalysisDoc {
   meetingId: ObjectId;
   accountId: ObjectId;
   jobId: ObjectId;
-  provider: AiProviderName;
+  provider: AnalysisSource;
   model: string;
   promptVersion: string;
   output: MeetingAnalysisOutput;
@@ -240,7 +241,7 @@ export interface AiJobDoc {
   accountId: ObjectId;
   status: "queued" | "running" | "succeeded" | "failed";
   attempts: number;
-  provider: AiProviderName;
+  provider: AnalysisSource;
   model: string;
   promptVersion: string;
   usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number } | null;

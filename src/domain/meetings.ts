@@ -303,6 +303,17 @@ export const AI_PROVIDERS = ["anthropic", "openai"] as const;
 export type AiProviderName = (typeof AI_PROVIDERS)[number];
 export const AI_PROVIDER_LABELS: Record<AiProviderName, string> = { anthropic: "Anthropic (Claude)", openai: "OpenAI" };
 
+/** Where an analysis came from: a configured provider, or a result imported from an external tool (e.g. Glean). */
+export type AnalysisSource = AiProviderName | "import";
+
+export const importAnalysisSchema = z.object({
+  /** Raw text returned by the external tool; may include ```json fences or surrounding prose. */
+  result: z.string().trim().min(2, "Paste the JSON result").max(500_000),
+  /** Free label shown on the analysis, e.g. "Glean". */
+  sourceLabel: z.string().trim().max(60).optional(),
+});
+export type ImportAnalysisInput = z.infer<typeof importAnalysisSchema>;
+
 export const aiSettingsSchema = z.object({
   enabled: z.boolean(),
   provider: z.enum(AI_PROVIDERS),
