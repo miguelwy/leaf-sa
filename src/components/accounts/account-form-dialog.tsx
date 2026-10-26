@@ -73,6 +73,9 @@ export function AccountFormDialog({
             const created = await api<Account>("POST", "/api/accounts", values);
             toast.success("Account created");
             router.push(`/accounts/${created.id}`);
+            // Layouts are kept across client navigation; refresh so shared account
+            // lists (meeting, note and task dialogs) include the new account.
+            router.refresh();
           }
           dialog.setOpen(false);
         } catch (error) {
