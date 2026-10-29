@@ -1,6 +1,7 @@
 import { MongoClient, type Db } from "mongodb";
 import { env } from "@/server/env";
 import { initDatabase } from "./init";
+import { runDataMigrations } from "./migrations";
 
 interface MongoState {
   client: MongoClient;
@@ -17,6 +18,7 @@ export function getDb(): Promise<Db> {
     const ready = client.connect().then(async (connected) => {
       const db = connected.db(MONGODB_DB);
       await initDatabase(db);
+      await runDataMigrations(db);
       return db;
     });
     // Allow a retry on the next call if the first connection attempt fails.

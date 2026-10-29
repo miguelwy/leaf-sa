@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ClipboardList, FileX, MoreHorizontal, Pencil, RefreshCw, Sparkles, Trash2, Upload, Users } from "lucide-react";
-import { CHANGE_TYPE_LABELS, type Meeting, type MeetingAnalysis } from "@/domain/meetings";
+import type { Meeting, MeetingAnalysis, StoredAnalysisOutput } from "@/domain/meetings";
 import { api } from "@/lib/api";
 import { useApiAction } from "@/hooks/use-api-action";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,28 @@ export interface JobInfo {
   usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number } | null;
   costUsd: number | null;
   durationMs: number | null;
+}
+
+const LEGACY_KEYS: [string, string][] = [
+  ["businessInsights", "Business insights"],
+  ["technicalInsights", "Technical insights"],
+  ["decisions", "Decisions made"],
+  ["openQuestions", "Open questions"],
+  ["missingInformation", "Still unknown"],
+  ["changesSinceLastMeeting", "What changed since the last meeting"],
+];
+
+/** Lists stored by the pre-simplification analysis, shown read-only. */
+function legacySections(output: StoredAnalysisOutput) {
+  return LEGACY_KEYS.flatMap(([key, title]) => {
+    const value = output[key];
+    if (!Array.isArray(value) || value.length === 0) return [];
+    const items = value
+      .map((v) => (typeof v === "string" ? v : typeof v === "object" && v && "text" in v ? String((v as { text: unknown }).text) : null))
+      .filter((t): t is string => !!t)
+      .map((text) => ({ text }));
+    return items.length ? [{ title, items }] : [];
+  });
 }
 
 function InsightList({ title, items }: { title: string; items: { text: string; kind?: string; confidence?: string }[] }) {
@@ -198,14 +220,6 @@ export function MeetingWorkspace({
           </div>
         </div>
       )}
-      {!ai.ready && meeting.transcript && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm">
-          <span className="text-muted-foreground">{ai.reason}</span>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/settings#ai">Configure AI processing</Link>
-          </Button>
-        </div>
-      )}
 
       {replacingTranscript || !meeting.transcript ? (
         <AddTranscriptPanel
@@ -264,24 +278,9 @@ export function MeetingWorkspace({
               <>
                 <Panel title="Summary">
                   <Markdown>{meeting.summary ?? output!.summary}</Markdown>
-                  {output!.changesSinceLastMeeting.length > 0 && (
-                    <div className="mt-4 space-y-2 border-t pt-3">
-                      <SectionLabel>What changed since the last meeting</SectionLabel>
-                      <ul className="space-y-1.5">
-                        {output!.changesSinceLastMeeting.map((c, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm">
-                            <Pill tone={c.type === "contradiction" ? "danger" : c.type === "resolved_question" ? "success" : "info"}>
-                              {CHANGE_TYPE_LABELS[c.type]}
-                            </Pill>
-                            <span>{c.text}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
                 </Panel>
 
-                <Panel title="Suggested account updates" description="Review each change. Approved items are written with this meeting as their source.">
+                <Panel title="Review" description="Approve what is right. Approved items go straight to the account.">
                   <ReviewPanel
                     analysisId={analysis.id}
                     suggestions={analysis.suggestions}
@@ -291,21 +290,15 @@ export function MeetingWorkspace({
                   />
                 </Panel>
 
-                <Panel title="Meeting intelligence">
-                  <div className="space-y-4">
-                    <InsightList title="Business insights" items={output!.businessInsights} />
-                    <InsightList title="Technical insights" items={output!.technicalInsights} />
-                    <InsightList title="Decisions made" items={output!.decisions} />
-                    <InsightList
-                      title="Action items mentioned"
-                      items={output!.actionItems.map((a) => ({
-                        text: [a.title, a.owner && `— ${a.owner}`, a.dueDate && `(due ${a.dueDate})`].filter(Boolean).join(" "),
-                      }))}
-                    />
-                    <InsightList title="Open questions" items={output!.openQuestions} />
-                    <InsightList title="Still unknown" items={output!.missingInformation.map((text) => ({ text }))} />
-                  </div>
-                </Panel>
+                {legacySections(output!).length > 0 && (
+                  <Panel title="More from this analysis" description="Recorded by an earlier version of the analysis.">
+                    <div className="space-y-4">
+                      {legacySections(output!).map((sec) => (
+                        <InsightList key={sec.title} title={sec.title} items={sec.items} />
+                      ))}
+                    </div>
+                  </Panel>
+                )}
 
                 <p className="text-[11px] text-muted-foreground">
                   {analysis.provider === "import" ? `Imported from ${analysis.model} ` : "Analyzed "}

@@ -1,20 +1,29 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { ObjectId, type Filter } from "mongodb";
 import type { SessionUser } from "@/domain/auth";
 import { getFieldDef, type DiscoveryItemInput } from "@/domain/discovery";
 import {
   accountInputSchema,
   accountPatchSchema,
+  featureInputSchema,
+  featurePatchSchema,
+  keyNoteInputSchema,
+  MAX_FEATURES,
+  MAX_KEY_NOTES,
   type Account,
   type AccountInput,
   type AccountListItem,
+  type FeatureInput,
+  type ItemSource,
+  type KeyNoteInput,
 } from "@/domain/entities";
 import { collections } from "@/server/db/collections";
 import { idString, toObjectId, toObjectIdOrNull } from "@/server/db/ids";
-import type { AccountDoc } from "@/server/db/types";
+import type { AccountDoc, FeatureDoc, ItemSourceDoc, KeyNoteDoc } from "@/server/db/types";
 import { ConflictError, NotFoundError, ValidationError } from "@/server/http/errors";
 import { mapDiscoveryValues, mergeDiscoveryItems, summarizeItems } from "./discovery";
-import { diffObjects, recordChange } from "./history";
+import { diffObjects, recordChange, type AuditOptions } from "./history";
 import { assertEnumValue, getEnumerations } from "./settings";
 
 const AUDITED_FIELDS = [
@@ -44,9 +53,17 @@ export function mapAccount(doc: AccountDoc): Account {
     lastInteractionAt: doc.lastInteractionAt,
     nextMeetingAt: doc.nextMeetingAt,
     techStack: mapDiscoveryValues(doc.techStack),
+    keyNotes: (doc.keyNotes ?? []).map((n) => ({ ...n, source: mapItemSource(n.source) })),
+    features: (doc.features ?? []).map((f) => ({ ...f, source: mapItemSource(f.source) })),
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
+}
+
+export function mapItemSource(source: ItemSourceDoc): ItemSource {
+  if (source.kind === "meeting") return { kind: "meeting", meetingId: source.meetingId.toHexString(), excerpt: source.excerpt ?? null };
+  if (source.kind === "migrated") return { kind: "migrated", from: source.from };
+  return { kind: "manual" };
 }
 
 async function assertAeExists(aeId: ObjectId | null) {
@@ -149,6 +166,9 @@ export async function createAccount(raw: AccountInput, actor: SessionUser): Prom
     nameLower: input.name.toLowerCase(),
     aeId,
     techStack: {},
+    keyNotes: [],
+    features: [],
+    simplifiedAt: new Date(),
     createdAt: now,
     updatedAt: now,
   };
@@ -265,4 +285,127 @@ export async function touchAccount(accountId: ObjectId): Promise<void> {
 
 export function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// ---------------------------------------------------------------------------
+// Key notes and MongoDB features
+// ---------------------------------------------------------------------------
+
+async function loadForEdit(accountId: string) {
+  const _id = toObjectId(accountId, "Account");
+  const { accounts } = await collections();
+  const doc = await accounts.findOne({ _id });
+  if (!doc) throw new NotFoundError("Account");
+  return { _id, doc, accounts };
+}
+
+export async function addKeyNote(
+  accountId: string,
+  raw: KeyNoteInput,
+  actor: SessionUser,
+  options: AuditOptions & { source?: ItemSourceDoc } = {},
+): Promise<Account> {
+  const { text } = keyNoteInputSchema.parse(raw);
+  const { _id, doc, accounts } = await loadForEdit(accountId);
+  if ((doc.keyNotes?.length ?? 0) >= MAX_KEY_NOTES) throw new ValidationError(`An account can hold at most ${MAX_KEY_NOTES} key notes`);
+  const now = new Date();
+  const note: KeyNoteDoc = { id: randomUUID(), text, source: options.source ?? { kind: "manual" }, createdAt: now, updatedAt: now };
+  // Newest first.
+  const after = await accounts.findOneAndUpdate(
+    { _id },
+    { $push: { keyNotes: { $each: [note], $position: 0 } }, $set: { updatedAt: now } },
+    { returnDocument: "after" },
+  );
+  await recordChange({ accountId: _id, entityType: "account", entityId: _id, entityLabel: doc.name, action: "update", changes: [{ field: "keyNotes", from: null, to: text }], actor, actorKind: options.actorKind });
+  return mapAccount(after!);
+}
+
+export async function updateKeyNote(accountId: string, noteId: string, raw: KeyNoteInput, actor: SessionUser): Promise<Account> {
+  const { text } = keyNoteInputSchema.parse(raw);
+  const { _id, doc, accounts } = await loadForEdit(accountId);
+  const prior = doc.keyNotes?.find((n) => n.id === noteId);
+  if (!prior) throw new NotFoundError("Key note");
+  const after = await accounts.findOneAndUpdate(
+    { _id, "keyNotes.id": noteId },
+    { $set: { "keyNotes.$.text": text, "keyNotes.$.updatedAt": new Date(), updatedAt: new Date() } },
+    { returnDocument: "after" },
+  );
+  await recordChange({ accountId: _id, entityType: "account", entityId: _id, entityLabel: doc.name, action: "update", changes: [{ field: "keyNotes", from: prior.text, to: text }], actor });
+  return mapAccount(after!);
+}
+
+export async function removeKeyNote(accountId: string, noteId: string, actor: SessionUser): Promise<Account> {
+  const { _id, doc, accounts } = await loadForEdit(accountId);
+  const prior = doc.keyNotes?.find((n) => n.id === noteId);
+  if (!prior) throw new NotFoundError("Key note");
+  const after = await accounts.findOneAndUpdate({ _id }, { $pull: { keyNotes: { id: noteId } }, $set: { updatedAt: new Date() } }, { returnDocument: "after" });
+  await recordChange({ accountId: _id, entityType: "account", entityId: _id, entityLabel: doc.name, action: "update", changes: [{ field: "keyNotes", from: prior.text, to: null }], actor });
+  return mapAccount(after!);
+}
+
+export async function addFeature(
+  accountId: string,
+  raw: FeatureInput,
+  actor: SessionUser,
+  options: AuditOptions & { source?: ItemSourceDoc } = {},
+): Promise<Account> {
+  const input = featureInputSchema.parse(raw);
+  assertEnumValue(await getEnumerations(), "mongodbCapabilities", "capability", input.capability);
+  const { _id, doc, accounts } = await loadForEdit(accountId);
+  if (doc.features?.some((f) => f.capability.toLowerCase() === input.capability.toLowerCase())) {
+    throw new ConflictError(`${input.capability} is already listed for this account`);
+  }
+  if ((doc.features?.length ?? 0) >= MAX_FEATURES) throw new ValidationError(`An account can hold at most ${MAX_FEATURES} features`);
+  const now = new Date();
+  const feature: FeatureDoc = { id: randomUUID(), ...input, source: options.source ?? { kind: "manual" }, createdAt: now, updatedAt: now };
+  const after = await accounts.findOneAndUpdate({ _id }, { $push: { features: feature }, $set: { updatedAt: now } }, { returnDocument: "after" });
+  await recordChange({
+    accountId: _id,
+    entityType: "account",
+    entityId: _id,
+    entityLabel: doc.name,
+    action: "update",
+    changes: [{ field: `features.${input.capability}`, from: null, to: input.why ?? input.status }],
+    actor,
+    actorKind: options.actorKind,
+  });
+  return mapAccount(after!);
+}
+
+export async function updateFeature(accountId: string, featureId: string, raw: Partial<FeatureInput>, actor: SessionUser): Promise<Account> {
+  const input = featurePatchSchema.parse(raw);
+  const { _id, doc, accounts } = await loadForEdit(accountId);
+  const prior = doc.features?.find((f) => f.id === featureId);
+  if (!prior) throw new NotFoundError("Feature");
+  if (input.capability !== undefined) {
+    assertEnumValue(await getEnumerations(), "mongodbCapabilities", "capability", input.capability, prior.capability);
+  }
+  const set = Object.fromEntries(Object.entries(input).map(([k, v]) => [`features.$.${k}`, v]));
+  const after = await accounts.findOneAndUpdate(
+    { _id, "features.id": featureId },
+    { $set: { ...set, "features.$.updatedAt": new Date(), updatedAt: new Date() } },
+    { returnDocument: "after" },
+  );
+  await recordChange({
+    accountId: _id,
+    entityType: "account",
+    entityId: _id,
+    entityLabel: doc.name,
+    action: "update",
+    changes: diffObjects(prior as unknown as Record<string, unknown>, input as Record<string, unknown>, ["capability", "why", "status"]).map((c) => ({
+      ...c,
+      field: `features.${prior.capability}.${c.field}`,
+    })),
+    actor,
+  });
+  return mapAccount(after!);
+}
+
+export async function removeFeature(accountId: string, featureId: string, actor: SessionUser): Promise<Account> {
+  const { _id, doc, accounts } = await loadForEdit(accountId);
+  const prior = doc.features?.find((f) => f.id === featureId);
+  if (!prior) throw new NotFoundError("Feature");
+  const after = await accounts.findOneAndUpdate({ _id }, { $pull: { features: { id: featureId } }, $set: { updatedAt: new Date() } }, { returnDocument: "after" });
+  await recordChange({ accountId: _id, entityType: "account", entityId: _id, entityLabel: doc.name, action: "update", changes: [{ field: `features.${prior.capability}`, from: prior.status, to: null }], actor });
+  return mapAccount(after!);
 }

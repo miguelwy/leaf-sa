@@ -10,25 +10,30 @@ can later be turned into reviewed, traceable account knowledge (Meeting Intellig
 
 ## What works today
 
+Each account is **one page**: action items, meetings, key notes, technical champions, MongoDB features
+and opportunities, all editable in place.
+
 | Area | Capabilities |
 | --- | --- |
 | Authentication | First-run owner setup, email/password sign-in, HTTP-only signed session cookie, route protection, login rate limiting, cross-origin mutation blocking |
-| Dashboard | My Focus (overdue/due tasks, upcoming meetings, milestones), follow-ups, accounts by AE, active opportunities by sales motion, discovery completeness, recently updated accounts |
-| Account Executives | CRUD, territory/region, assigned accounts and opportunities per AE, filter by AE across the app |
-| Accounts | CRUD, status, AE, contacts, next meeting/last interaction, internal notes, permanent deletion of all account data |
-| Opportunities | Multiple per account; sales motion, Tiger route, stage, priority, complexity, timeline, workload, next milestone |
-| Discovery | Business, technical and competitive discovery per opportunity, workloads with independent requirements; every value is an item with status (confirmed/tentative) and source |
-| Technology Stack | Account-wide landscape (databases, clouds, languages, frameworks, pipelines, integrations) |
-| Solution Fit | MongoDB capabilities per opportunity, each tied to a discovered customer problem, with status Identified/Proposed/Validated/Rejected |
-| Architecture | Current/target state, decisions, assumptions, tradeoffs, components, integrations, links, Mermaid diagrams |
-| SA Notes | Markdown with code blocks, tags, pinning, opportunity links, search, full editing history |
-| Action Items | Global and per account, statuses To Do/In Progress/Blocked/Done, owners, due dates, overdue indicators |
-| History | Field-level audit log of every change to an account and its records |
-| Meetings | Per account and opportunity; transcript by paste or TXT/Markdown/DOCX/text-PDF upload, speaker/timestamp detection, transcript retention control |
-| Meeting Intelligence | AI analysis (Anthropic or OpenAI, schema-validated) → summary, business/technical insights, decisions, action items, open questions, missing information, "what changed since last meeting" |
-| AI Review | Transcript with highlighted evidence beside suggested updates (current vs suggested, confidence, stated/interpreted/recommended); approve, edit, reject, bulk-approve; conflicts need an explicit decision; approved facts keep the meeting and quote as source; every applied change is audited as *AI suggestion approved* |
-| Search | Keyword search (text indexes + substring fallback) across accounts, opportunities, meetings/transcripts, notes, tasks, contacts and AEs; Ctrl/⌘+K palette |
-| Settings | Editable enumerations (sales motions, Tiger routes, stages, closed stages, statuses, priorities, complexities, personas, MongoDB capabilities, meeting types); AI-processing and data-storage transparency |
+| Dashboard | My Focus (overdue/due tasks, upcoming meetings, milestones), follow-ups, accounts by AE, opportunities by sales motion, recent meeting analyses |
+| Accounts | One page per account; status, AE, next meeting, description; permanent deletion of all account data |
+| Action items | One-line add (title, owner, due date), one-click done, overdue indicators; global list with filters |
+| Technical champions | People who drive the evaluation (star a contact to make them a champion), with why they matter |
+| MongoDB features | Capabilities related to the customer, with the need they address and a status (Identified/Proposed/Validated/Rejected) |
+| Key notes | Flat list of important facts about the customer |
+| Opportunities | Name, sales motion, stage and next step |
+| Meetings | Transcript by paste or TXT/Markdown/DOCX/text-PDF upload, speaker/timestamp detection |
+| Meeting analysis | Summary, action items, technical champions and MongoDB features — via Glean (copy prompt, paste answer) or an AI API key — reviewed next to the highlighted transcript before anything changes |
+| SA Notes | Markdown notes with tags, pinning, search and editing history |
+| History | Field-level audit log of every change to an account |
+| Search | Keyword search across accounts, opportunities, meetings/transcripts, notes, tasks, contacts and AEs; Ctrl/⌘+K palette |
+| Settings | Editable lists (sales motions, stages, MongoDB capabilities, meeting types, …); AI-processing transparency |
+
+> **Simplified model (Oct 2026).** The earlier structured discovery (business/technical/competitive/
+> architecture/stack) and per-opportunity solution fit were folded into account-level *Key notes* and
+> *MongoDB features* by an automatic, additive migration on startup. The original fields are still in the
+> database, untouched; nothing was deleted.
 
 ## Tech stack
 

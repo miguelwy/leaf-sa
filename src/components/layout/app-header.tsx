@@ -47,7 +47,7 @@ export function AppHeader({ user }: { user: SessionUser }) {
   const close = (open: boolean) => !open && setCreating(null);
 
   return (
-    <header className="sticky top-0 z-30 flex h-12 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/70">
       <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation" onClick={() => setMobileNav(true)}>
         <Menu className="size-4" />
       </Button>

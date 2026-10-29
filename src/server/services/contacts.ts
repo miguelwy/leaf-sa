@@ -10,7 +10,7 @@ import { touchAccount } from "./accounts";
 import { diffObjects, recordChange, type AuditOptions } from "./history";
 import { assertEnumValue, getEnumerations } from "./settings";
 
-const AUDITED_FIELDS = ["name", "title", "email", "phone", "persona", "isPrimary", "notes"] as const;
+const AUDITED_FIELDS = ["name", "title", "email", "phone", "persona", "isPrimary", "isChampion", "notes"] as const;
 
 function mapContact(doc: ContactDoc): Contact {
   return {
@@ -22,6 +22,7 @@ function mapContact(doc: ContactDoc): Contact {
     phone: doc.phone,
     persona: doc.persona,
     isPrimary: doc.isPrimary,
+    isChampion: doc.isChampion ?? false,
     notes: doc.notes,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
@@ -32,7 +33,7 @@ export async function listContacts(accountId: string): Promise<Contact[]> {
   const { contacts } = await collections();
   const docs = await contacts
     .find({ accountId: toObjectId(accountId, "Account") })
-    .sort({ isPrimary: -1, name: 1 })
+    .sort({ isChampion: -1, isPrimary: -1, name: 1 })
     .toArray();
   return docs.map(mapContact);
 }
@@ -66,7 +67,7 @@ export async function createContact(
   return mapContact(doc);
 }
 
-export async function updateContact(id: string, raw: Partial<ContactInput>, actor: SessionUser): Promise<Contact> {
+export async function updateContact(id: string, raw: Partial<ContactInput>, actor: SessionUser, options: AuditOptions = {}): Promise<Contact> {
   const input = contactPatchSchema.parse(raw);
   const _id = toObjectId(id, "Contact");
   const { contacts } = await collections();
@@ -89,6 +90,7 @@ export async function updateContact(id: string, raw: Partial<ContactInput>, acto
     action: "update",
     changes: diffObjects(before as unknown as Record<string, unknown>, input as Record<string, unknown>, AUDITED_FIELDS),
     actor,
+    actorKind: options.actorKind,
   });
   return mapContact(after);
 }
