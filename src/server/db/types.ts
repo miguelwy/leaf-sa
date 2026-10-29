@@ -78,6 +78,30 @@ export interface AccountDoc extends Stamped {
   lastInteractionAt: Date | null;
   nextMeetingAt: Date | null;
   techStack: DiscoveryValuesDoc;
+  // Simplified model (added by the 2026-10 migration; optional on older documents).
+  keyNotes?: KeyNoteDoc[];
+  features?: FeatureDoc[];
+  simplifiedAt?: Date;
+}
+
+export type ItemSourceDoc = SourceDoc | { kind: "migrated"; from: string };
+
+export interface KeyNoteDoc {
+  id: string;
+  text: string;
+  source: ItemSourceDoc;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface FeatureDoc {
+  id: string;
+  capability: string;
+  why: string | null;
+  status: SolutionFitStatus;
+  source: ItemSourceDoc;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface ContactDoc extends Stamped {
@@ -89,6 +113,7 @@ export interface ContactDoc extends Stamped {
   phone: string | null;
   persona: string | null;
   isPrimary: boolean;
+  isChampion?: boolean;
   notes: string | null;
 }
 

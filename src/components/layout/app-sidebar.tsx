@@ -20,7 +20,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
             onClick={onNavigate}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "group flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium transition-colors",
+              "group flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
               active
                 ? "bg-sidebar-accent text-sidebar-accent-foreground"
                 : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
@@ -40,8 +40,8 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
 export function AppSidebar({ ai }: { ai: { ready: boolean; providerLabel: string } }) {
   return (
-    <aside className="sticky top-0 hidden h-svh w-60 shrink-0 flex-col border-r bg-sidebar lg:flex">
-      <div className="flex h-12 items-center border-b px-4">
+    <aside className="sticky top-0 hidden h-svh w-64 shrink-0 flex-col border-r bg-sidebar lg:flex">
+      <div className="flex h-14 items-center border-b px-4">
         <Link href="/" aria-label="Dashboard">
           <BrandMark />
         </Link>

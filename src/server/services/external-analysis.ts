@@ -47,25 +47,12 @@ export function extractJsonObject(text: string): unknown {
 
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === "object" && v !== null && !Array.isArray(v);
-const LIST_KEYS = [
-  "businessInsights",
-  "technicalInsights",
-  "decisions",
-  "actionItems",
-  "openQuestions",
-  "missingInformation",
-  "discoveryUpdates",
-  "classificationSuggestions",
-  "mongodbOpportunities",
-  "contacts",
-  "changesSinceLastMeeting",
-] as const;
-const NULLABLE_KEYS = ["owner", "dueDate", "opportunityId", "relatedItemId", "title", "persona", "speaker"];
-const LOWERCASE_ENUM_KEYS = ["kind", "confidence", "relation", "scope"];
+const LIST_KEYS = ["actionItems", "champions", "features"] as const;
+const NULLABLE_KEYS = ["owner", "dueDate", "title", "speaker"];
 
 /**
  * Tolerates the usual gaps of chat assistants (missing lists, missing nullable keys,
- * capitalised enum values, evidence given as a plain string) before strict validation.
+ * evidence given as a plain string or missing) before strict validation.
  */
 export function normalizeImportedOutput(raw: unknown): unknown {
   if (!isObj(raw)) return raw;
@@ -77,17 +64,15 @@ export function normalizeImportedOutput(raw: unknown): unknown {
     if (!isObj(item)) return item;
     const fixed: Json = { ...item };
     for (const k of NULLABLE_KEYS) if (fixed[k] === undefined || fixed[k] === "") fixed[k] = null;
-    for (const k of LOWERCASE_ENUM_KEYS) if (typeof fixed[k] === "string") fixed[k] = (fixed[k] as string).toLowerCase();
     if (typeof fixed.evidence === "string") fixed.evidence = { excerpt: fixed.evidence, speaker: null };
+    if (fixed.evidence === undefined || fixed.evidence === null) fixed.evidence = { excerpt: "", speaker: null };
     if (isObj(fixed.evidence) && fixed.evidence.speaker === undefined) fixed.evidence = { ...fixed.evidence, speaker: null };
+    if (typeof fixed.role !== "string" && "name" in fixed) fixed.role = "";
+    if (typeof fixed.why !== "string" && "capability" in fixed) fixed.why = "";
     return fixed;
   };
   for (const key of LIST_KEYS) {
     if (Array.isArray(out[key])) out[key] = (out[key] as unknown[]).map(fixItem);
-  }
-  // Open questions and changes allow evidence to be null; make missing evidence explicit.
-  for (const key of ["openQuestions", "changesSinceLastMeeting"] as const) {
-    out[key] = (out[key] as unknown[]).map((i) => (isObj(i) && i.evidence === undefined ? { ...i, evidence: null } : i));
   }
   return out;
 }

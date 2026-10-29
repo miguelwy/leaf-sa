@@ -2,7 +2,6 @@ import {
   Briefcase,
   Building2,
   CalendarClock,
-  GraduationCap,
   LayoutDashboard,
   ListChecks,
   Search,
@@ -24,7 +23,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/account-executives", label: "Account Executives", icon: Briefcase },
   { href: "/meetings", label: "Meetings", icon: CalendarClock },
   { href: "/action-items", label: "Action Items", icon: ListChecks },
-  { href: "/enablement", label: "Enablement", icon: GraduationCap, planned: "Phase 4" },
   { href: "/search", label: "Search", icon: Search },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

@@ -12,11 +12,14 @@ import { EmptyState } from "@/components/common/layout-primitives";
 import { SuggestionCard } from "./suggestion-card";
 
 const SECTIONS: { type: SuggestionType; title: string }[] = [
-  { type: "discovery", title: "Discovery updates" },
-  { type: "classification", title: "Classification" },
-  { type: "solution_fit", title: "MongoDB solution fit" },
   { type: "action_item", title: "Action items" },
-  { type: "contact", title: "New contacts" },
+  { type: "champion", title: "Technical champions" },
+  { type: "feature", title: "MongoDB features" },
+  // From analyses made before the simplification:
+  { type: "discovery", title: "Key notes" },
+  { type: "solution_fit", title: "MongoDB features (earlier analysis)" },
+  { type: "contact", title: "Contacts" },
+  { type: "classification", title: "Classification" },
 ];
 
 type Filter = "pending" | "approved" | "rejected" | "all";
@@ -45,7 +48,6 @@ export function ReviewPanel({
   const [filter, setFilter] = React.useState<Filter>(counts.pending ? "pending" : "all");
   const { run, pending } = useApiAction();
   const clean = suggestions.filter(isClean);
-  const cleanHigh = clean.filter((s) => s.confidence === "high");
   const visible = suggestions.filter((s) => filter === "all" || s.status === filter);
 
   const bulk = (ids: string[], action: "approve" | "reject") =>
@@ -79,14 +81,9 @@ export function ReviewPanel({
         </div>
         {counts.pending > 0 && (
           <div className="flex flex-wrap gap-1.5">
-            {cleanHigh.length > 0 && cleanHigh.length !== clean.length && (
-              <Button size="sm" variant="outline" disabled={pending} onClick={() => bulk(cleanHigh.map((s) => s.id), "approve")}>
-                Approve high confidence ({cleanHigh.length})
-              </Button>
-            )}
             {clean.length > 0 && (
-              <Button size="sm" disabled={pending} onClick={() => bulk(clean.map((s) => s.id), "approve")}>
-                <CheckCheck className="size-3.5" /> Approve all clean ({clean.length})
+              <Button disabled={pending} onClick={() => bulk(clean.map((s) => s.id), "approve")}>
+                <CheckCheck className="size-4" /> Approve all ({clean.length})
               </Button>
             )}
           </div>
@@ -94,7 +91,7 @@ export function ReviewPanel({
       </div>
       {counts.pending > clean.length && (
         <p className="text-xs text-muted-foreground">
-          {counts.pending - clean.length} suggestion(s) conflict with recorded information or need a choice — bulk approval skips them.
+          {counts.pending - clean.length} item(s) need a decision on their own — “Approve all” skips them.
         </p>
       )}
 
@@ -106,7 +103,7 @@ export function ReviewPanel({
           if (!items.length) return null;
           return (
             <div key={type} className="space-y-2">
-              <h3 className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+              <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                 {title} ({items.length})
               </h3>
               {items.map((s) => (

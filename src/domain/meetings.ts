@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { objectIdSchema, optionalDate, optionalObjectId, optionalText, requiredText, type Timestamps } from "./common";
-import { DISCOVERY_FIELDS } from "./discovery";
 
 // ---------------------------------------------------------------------------
 // Meetings and transcripts
@@ -107,28 +106,6 @@ export const CLASSIFICATION_LABELS: Record<ClassificationField, string> = {
   technicalComplexity: "Technical complexity",
 };
 
-export const CHANGE_TYPES = [
-  "new_requirement",
-  "architecture_change",
-  "new_technology",
-  "resolved_question",
-  "decision",
-  "commitment",
-  "contradiction",
-] as const;
-export type ChangeType = (typeof CHANGE_TYPES)[number];
-export const CHANGE_TYPE_LABELS: Record<ChangeType, string> = {
-  new_requirement: "New requirement",
-  architecture_change: "Architecture change",
-  new_technology: "New technology",
-  resolved_question: "Resolved question",
-  decision: "Decision",
-  commitment: "Commitment",
-  contradiction: "Contradiction",
-};
-
-const DISCOVERY_KEYS = DISCOVERY_FIELDS.map((f) => f.key) as [string, ...string[]];
-
 const evidence = z
   .object({
     excerpt: z.string().describe("Short verbatim quote copied exactly from the transcript (max ~300 characters)."),
@@ -136,95 +113,54 @@ const evidence = z
   })
   .describe("Supporting transcript evidence.");
 
-const insight = z.object({
-  text: z.string(),
-  kind: z.enum(STATEMENT_KINDS),
-  confidence: z.enum(CONFIDENCE_LEVELS),
-  evidence,
-});
-
 /**
- * Structured output requested from the model. Kept to constructs supported by both
- * providers' structured-output modes (objects, arrays, enums, strings, nullable).
+ * Structured output requested from the model (v2, simplified): summary, action items,
+ * technical champions and related MongoDB features. Kept to constructs supported by both
+ * providers' structured-output modes (objects, arrays, strings, nullable).
  */
 export const meetingAnalysisOutputSchema = z.object({
-  summary: z.string().describe("Concise executive summary of the discussion (3-6 sentences)."),
-  businessInsights: z.array(insight).describe("Business objectives, drivers, pain points and impact."),
-  technicalInsights: z.array(insight).describe("Technologies, workloads, requirements, constraints, architecture observations."),
-  decisions: z.array(z.object({ text: z.string(), evidence })).describe("Only decisions explicitly confirmed in the meeting."),
+  summary: z.string().describe("Concise summary of the meeting in 3-5 sentences."),
   actionItems: z
     .array(
       z.object({
-        title: z.string(),
+        title: z.string().describe("Short imperative task, e.g. 'Send sizing worksheet'."),
         owner: z.string().nullable().describe("Only if explicitly stated."),
         dueDate: z.string().nullable().describe("YYYY-MM-DD only if a concrete date was explicitly stated, else null."),
-        opportunityId: z.string().nullable(),
         evidence,
       }),
     )
     .describe("Tasks or commitments explicitly made in the meeting."),
-  openQuestions: z.array(z.object({ text: z.string(), evidence: evidence.nullable() })).describe("Information that still needs clarification."),
-  missingInformation: z.array(z.string()).describe("Important discovery information that is still unknown after this meeting."),
-  discoveryUpdates: z
-    .array(
-      z.object({
-        scope: z.enum(["opportunity", "account"]),
-        fieldKey: z.enum(DISCOVERY_KEYS),
-        opportunityId: z.string().nullable().describe("Required for opportunity scope when known; one of the provided opportunity ids."),
-        value: z.string().describe("The value to record, phrased as a concise standalone statement."),
-        kind: z.enum(STATEMENT_KINDS),
-        confidence: z.enum(CONFIDENCE_LEVELS),
-        relation: z.enum(RELATIONS),
-        relatedItemId: z.string().nullable().describe("Id of the existing item this confirms, updates, conflicts with or resolves."),
-        evidence,
-      }),
-    )
-    .describe("Proposed updates to the account/opportunity discovery profile."),
-  classificationSuggestions: z
-    .array(
-      z.object({
-        field: z.enum(CLASSIFICATION_FIELDS),
-        opportunityId: z.string().nullable(),
-        value: z.string().describe("Must be one of the configured values for this field."),
-        rationale: z.string(),
-        confidence: z.enum(CONFIDENCE_LEVELS),
-        evidence,
-      }),
-    )
-    .describe("Only when the transcript gives clear supporting evidence."),
-  mongodbOpportunities: z
-    .array(
-      z.object({
-        capability: z.string().describe("One of the configured MongoDB capabilities."),
-        opportunityId: z.string().nullable(),
-        problem: z.string().describe("The discovered customer problem this addresses."),
-        justification: z.string(),
-        confidence: z.enum(CONFIDENCE_LEVELS),
-        evidence,
-      }),
-    )
-    .describe("Only capabilities technically justified by requirements discussed in the meeting."),
-  contacts: z
+  champions: z
     .array(
       z.object({
         name: z.string(),
-        title: z.string().nullable(),
-        persona: z.string().nullable().describe("One of the configured personas, or null."),
+        title: z.string().nullable().describe("Job title if stated."),
+        role: z.string().describe("Why this person matters technically (e.g. 'owns the catalog platform, pushing for the PoC')."),
         evidence,
       }),
     )
-    .describe("Customer-side people who participated or were mentioned, not already in the contact list."),
-  changesSinceLastMeeting: z
-    .array(z.object({ type: z.enum(CHANGE_TYPES), text: z.string(), evidence: evidence.nullable() }))
-    .describe("Differences versus the previous meeting and the current account profile. Empty if there is no prior context."),
+    .describe("Customer-side people who drive or strongly influence the technical evaluation."),
+  features: z
+    .array(
+      z.object({
+        capability: z.string().describe("One of the configured MongoDB capabilities."),
+        why: z.string().describe("The customer need from the meeting that this feature addresses."),
+        evidence,
+      }),
+    )
+    .describe("MongoDB features related to needs actually discussed in the meeting."),
 });
 export type MeetingAnalysisOutput = z.infer<typeof meetingAnalysisOutputSchema>;
+
+/** Analyses stored before the simplification have a richer shape; only `summary` is guaranteed. */
+export type StoredAnalysisOutput = { summary: string } & Record<string, unknown>;
 
 // ---------------------------------------------------------------------------
 // Reviewable suggestions derived from an analysis
 // ---------------------------------------------------------------------------
 
-export const SUGGESTION_TYPES = ["discovery", "classification", "action_item", "solution_fit", "contact"] as const;
+/** `champion` and `feature` are current; the others come from analyses made before the simplification. */
+export const SUGGESTION_TYPES = ["action_item", "champion", "feature", "discovery", "classification", "solution_fit", "contact"] as const;
 export type SuggestionType = (typeof SUGGESTION_TYPES)[number];
 
 export const REVIEW_STATUSES = ["pending", "approved", "rejected"] as const;
@@ -274,7 +210,7 @@ export interface MeetingAnalysis {
   provider: string;
   model: string;
   promptVersion: string;
-  output: MeetingAnalysisOutput;
+  output: StoredAnalysisOutput;
   suggestions: Suggestion[];
   createdAt: Date;
 }

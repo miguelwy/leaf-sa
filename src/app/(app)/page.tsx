@@ -50,20 +50,6 @@ function BarList({ rows, href }: { rows: { label: string; count: number; key: st
   );
 }
 
-function Meter({ filled, total }: { filled: number; total: number }) {
-  const pct = total ? Math.round((filled / total) * 100) : 0;
-  return (
-    <div className="flex items-center gap-2">
-      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
-        <div className={cn("h-full rounded-full", pct >= 60 ? "bg-success" : pct >= 30 ? "bg-warning" : "bg-destructive/70")} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">
-        {filled}/{total}
-      </span>
-    </div>
-  );
-}
-
 export default async function DashboardPage() {
   const [user, d, meetings] = await Promise.all([requireUser(), getDashboard(), listMeetings({ limit: 50 })]);
   const analyzed = meetings.filter((m) => m.latestAnalysisId).slice(0, 6);
@@ -220,39 +206,6 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Discovery completeness" description="Active opportunities with the least confirmed discovery" bodyClassName="p-0">
-          {d.discovery.length === 0 ? (
-            <EmptyState compact className="m-4" title="No active opportunities" />
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs text-muted-foreground">
-                  <th className="px-4 py-2 font-medium">Opportunity</th>
-                  <th className="w-36 px-2 py-2 font-medium">Business</th>
-                  <th className="w-36 px-4 py-2 font-medium">Technical</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {d.discovery.map((o) => (
-                  <tr key={o.opportunityId} className="hover:bg-muted/50">
-                    <td className="max-w-0 px-4 py-2">
-                      <Link href={`/accounts/${o.accountId}/discovery?opp=${o.opportunityId}`} className="block truncate font-medium hover:underline">
-                        {o.name}
-                      </Link>
-                      <span className="block truncate text-xs text-muted-foreground">{o.accountName}</span>
-                    </td>
-                    <td className="px-2 py-2">
-                      <Meter {...o.business} />
-                    </td>
-                    <td className="px-4 py-2">
-                      <Meter {...o.technical} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </Panel>
         <Panel title="Recently updated accounts" bodyClassName="p-0">
           <ul className="divide-y">
             {d.recentAccounts.map((a) => (

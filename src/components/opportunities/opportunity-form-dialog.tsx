@@ -8,24 +8,28 @@ import { toast } from "sonner";
 import { opportunityInputSchema, type Opportunity } from "@/domain/entities";
 import { api } from "@/lib/api";
 import { toDateInput } from "@/lib/format";
-import { SectionLabel } from "@/components/common/layout-primitives";
-import { applyServerErrors, DateField, FormGrid, SelectField, TextareaField, TextField } from "@/components/common/form";
 import { toOptions } from "@/lib/options";
+import { applyServerErrors, DateField, FormGrid, SelectField, TextField } from "@/components/common/form";
 import { FormDialog, useDialogState } from "@/components/common/form-dialog";
 import { useReferenceData } from "@/components/common/reference-data";
 
-function defaults(o?: Opportunity, aeId?: string | null) {
+/**
+ * Only the simplified fields are edited here. Other opportunity fields stay in the
+ * database untouched: they are not part of the form, so they are never sent.
+ */
+const formSchema = opportunityInputSchema.pick({
+  name: true,
+  salesMotion: true,
+  stage: true,
+  nextMilestoneTitle: true,
+  nextMilestoneDate: true,
+});
+
+function defaults(o?: Opportunity) {
   return {
     name: o?.name ?? "",
-    aeId: o?.aeId ?? aeId ?? null,
     salesMotion: o?.salesMotion ?? null,
-    tigerRoute: o?.tigerRoute ?? null,
     stage: o?.stage ?? null,
-    estimatedTimeline: o?.estimatedTimeline ?? "",
-    expectedWorkload: o?.expectedWorkload ?? "",
-    description: o?.description ?? "",
-    businessPriority: o?.businessPriority ?? null,
-    technicalComplexity: o?.technicalComplexity ?? null,
     nextMilestoneTitle: o?.nextMilestone.title ?? "",
     nextMilestoneDate: toDateInput(o?.nextMilestone.dueDate),
   };
@@ -33,7 +37,6 @@ function defaults(o?: Opportunity, aeId?: string | null) {
 
 export function OpportunityFormDialog({
   accountId,
-  accountAeId,
   opportunity,
   trigger,
   open,
@@ -47,24 +50,22 @@ export function OpportunityFormDialog({
   onOpenChange?: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const { enumerations: e, accountExecutives } = useReferenceData();
+  const { enumerations: e } = useReferenceData();
   const dialog = useDialogState(open, onOpenChange);
-  const form = useForm({ resolver: zodResolver(opportunityInputSchema), defaultValues: defaults(opportunity, accountAeId) });
+  const form = useForm({ resolver: zodResolver(formSchema), defaultValues: defaults(opportunity) });
 
   React.useEffect(() => {
-    if (dialog.open) form.reset(defaults(opportunity, accountAeId));
-  }, [dialog.open, opportunity, accountAeId, form]);
+    if (dialog.open) form.reset(defaults(opportunity));
+  }, [dialog.open, opportunity, form]);
 
   return (
     <FormDialog
       title={opportunity ? "Edit opportunity" : "New opportunity"}
-      description="Classification is always your call. Values come from Settings → Enumerations."
       trigger={trigger}
       open={dialog.open}
       onOpenChange={dialog.setOpen}
       form={form}
-      size="lg"
-      submitLabel={opportunity ? "Save changes" : "Create opportunity"}
+      submitLabel={opportunity ? "Save" : "Create"}
       onSubmit={async (values) => {
         try {
           if (opportunity) await api("PATCH", `/api/opportunities/${opportunity.id}`, values);
@@ -78,26 +79,11 @@ export function OpportunityFormDialog({
       }}
     >
       <FormGrid>
-        <TextField name="name" label="Opportunity name" required autoFocus className="sm:col-span-2" placeholder="e.g. Catalog migration from PostgreSQL" />
-        <SelectField name="aeId" label="Account Executive" options={accountExecutives.map((a) => ({ value: a.id, label: a.name }))} emptyLabel="Unassigned" />
-        <SelectField name="stage" label="Stage" options={toOptions(e.opportunityStages)} />
-      </FormGrid>
-
-      <SectionLabel className="pt-2">Classification</SectionLabel>
-      <FormGrid>
+        <TextField name="name" label="Name" required autoFocus className="sm:col-span-2" placeholder="e.g. Catalog migration" />
         <SelectField name="salesMotion" label="Sales motion" options={toOptions(e.salesMotions)} emptyLabel="Not classified" />
-        <SelectField name="tigerRoute" label="Tiger route" options={toOptions(e.tigerRoutes)} emptyLabel="Not classified" />
-        <SelectField name="businessPriority" label="Business priority" options={toOptions(e.priorities)} />
-        <SelectField name="technicalComplexity" label="Technical complexity" options={toOptions(e.complexities)} />
-      </FormGrid>
-
-      <SectionLabel className="pt-2">Scope & timing</SectionLabel>
-      <FormGrid>
-        <TextField name="estimatedTimeline" label="Estimated timeline" placeholder="e.g. Production by Q3" />
-        <TextField name="expectedWorkload" label="Expected workload" placeholder="e.g. Product catalog, 2 TB" />
-        <TextField name="nextMilestoneTitle" label="Next milestone" placeholder="e.g. PoC kickoff" />
-        <DateField name="nextMilestoneDate" label="Milestone date" />
-        <TextareaField name="description" label="Description" rows={3} className="sm:col-span-2" />
+        <SelectField name="stage" label="Stage" options={toOptions(e.opportunityStages)} />
+        <TextField name="nextMilestoneTitle" label="Next step" placeholder="e.g. PoC kickoff" />
+        <DateField name="nextMilestoneDate" label="Next step date" />
       </FormGrid>
     </FormDialog>
   );

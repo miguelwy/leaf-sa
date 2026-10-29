@@ -286,3 +286,33 @@ analysis), `GET/PATCH/DELETE /api/meetings/:id`, `PUT/DELETE /api/meetings/:id/t
 `POST /api/meetings/:id/analyze`, `GET /api/meetings/:id/status`,
 `POST /api/analyses/:id/suggestions/:suggestionId` (`approve|reject|reset`, optional `value`,
 `resolution`, `opportunityId`), `POST /api/analyses/:id/bulk`, `GET/PUT /api/settings/ai`.
+
+---
+
+## 11. Simplified workspace (October 2026)
+
+The account workspace was reduced to what the SA uses daily. UI and analysis changed; stored data did not
+lose anything.
+
+- **Account page:** one screen (no tabs) with Action items, Meetings, Key notes (main column) and Technical
+  champions, MongoDB features, Opportunities (side column). Notes and History are separate pages.
+- **Data model additions** (on `accounts`, all optional for older documents):
+  `keyNotes[] {id, text, source, createdAt, updatedAt}`, `features[] {id, capability, why, status, source, …}`,
+  `simplifiedAt`. Contacts gained `isChampion`.
+- **Migration** (`server/db/migrations.ts`, runs after schema setup on every start, idempotent per account
+  via `simplifiedAt`): copies `techStack` items and every opportunity's `discovery` items (except diagrams)
+  into `keyNotes` as "Label: value" (prefixed with the opportunity name when an account has several), and
+  each opportunity's `solutionFit` into `features` (deduplicated by capability). `techStack`, `discovery`,
+  `solutionFit`, workloads and the other opportunity fields are left as they were.
+- **Opportunity form** edits only name, sales motion, stage and next step; it uses a picked schema so the
+  hidden fields are never sent (and never nulled).
+- **Meeting analysis v2** (`meeting-analysis@v2`): output is `{summary, actionItems, champions, features}`.
+  Suggestions: `action_item` → action item with meeting source; `champion` → promotes an existing contact
+  with the same name or creates one with `isChampion`; `feature` → account feature (capability normalised to
+  the configured spelling; unknown capabilities are blocked until edited). Analyses stored before v2 still
+  render (summary + read-only lists) and their pending suggestions still apply: discovery → key note,
+  solution fit → feature, contact → champion, classification → opportunity.
+- **UI scale:** root font size 17px; larger nav, panels and buttons.
+- Removed pages/components: discovery, technology stack, solution fit, architecture, opportunities and
+  per-account action-item tabs; workloads and Mermaid UI. The corresponding services and API routes remain
+  for compatibility.

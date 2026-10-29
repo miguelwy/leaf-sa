@@ -70,8 +70,49 @@ export interface Account extends Timestamps {
   internalNotes: string | null;
   lastInteractionAt: Date | null;
   nextMeetingAt: Date | null;
+  /** Legacy structured discovery (kept in the database, no longer edited in the UI). */
   techStack: DiscoveryValues;
+  keyNotes: KeyNote[];
+  features: AccountFeature[];
 }
+
+// ---------------------------------------------------------------------------
+// Key notes and MongoDB features (simple, account-level)
+// ---------------------------------------------------------------------------
+
+export type ItemSource = { kind: "manual" } | { kind: "meeting"; meetingId: string; excerpt?: string | null } | { kind: "migrated"; from: string };
+
+export interface KeyNote {
+  id: string;
+  text: string;
+  source: ItemSource;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const keyNoteInputSchema = z.object({ text: requiredText(5000) });
+export type KeyNoteInput = z.input<typeof keyNoteInputSchema>;
+export const MAX_KEY_NOTES = 300;
+
+export interface AccountFeature {
+  id: string;
+  capability: string;
+  why: string | null;
+  status: SolutionFitStatus;
+  source: ItemSource;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const featureFields = {
+  capability: requiredText(120),
+  why: optionalText(5000),
+  status: z.enum(SOLUTION_FIT_STATUSES),
+};
+export const featureInputSchema = z.object({ ...featureFields, status: featureFields.status.default("Identified") });
+export const featurePatchSchema = z.object(featureFields).partial();
+export type FeatureInput = z.input<typeof featureInputSchema>;
+export const MAX_FEATURES = 60;
 
 export interface AccountListItem extends Account {
   aeName: string | null;
@@ -93,9 +134,15 @@ const contactFields = {
   phone: optionalText(40),
   persona: optionalText(80),
   isPrimary: z.boolean(),
+  /** Technical champion: someone at the customer driving the MongoDB evaluation. */
+  isChampion: z.boolean(),
   notes: optionalText(2000),
 };
-export const contactInputSchema = z.object({ ...contactFields, isPrimary: contactFields.isPrimary.default(false) });
+export const contactInputSchema = z.object({
+  ...contactFields,
+  isPrimary: contactFields.isPrimary.default(false),
+  isChampion: contactFields.isChampion.default(false),
+});
 export const contactPatchSchema = z.object(contactFields).partial();
 export type ContactInput = z.input<typeof contactInputSchema>;
 
@@ -108,6 +155,7 @@ export interface Contact extends Timestamps {
   phone: string | null;
   persona: string | null;
   isPrimary: boolean;
+  isChampion: boolean;
   notes: string | null;
 }
 

@@ -2,16 +2,13 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { ObjectId } from "mongodb";
 import type { SessionUser } from "@/domain/auth";
-import { DISCOVERY_FIELD_MAP, getFieldDef, type DiscoveryScope } from "@/domain/discovery";
-import type { EnumerationKind, Enumerations } from "@/domain/enumerations";
+import type { Enumerations } from "@/domain/enumerations";
 import {
-  CLASSIFICATION_LABELS,
   meetingAnalysisOutputSchema,
   type AiProviderName,
-  type ClassificationField,
   type MeetingAnalysis,
   type MeetingAnalysisOutput,
-  type Relation,
+  type StoredAnalysisOutput,
   type SuggestionEvidence,
 } from "@/domain/meetings";
 import { getAiStatus } from "@/server/ai/settings";
@@ -21,7 +18,7 @@ import { buildMeetingAnalysisPrompt, MEETING_ANALYSIS_PROMPT_VERSION, MEETING_AN
 import { redactContactDetails } from "@/server/ai/redact";
 import { collections } from "@/server/db/collections";
 import { idString, toObjectId } from "@/server/db/ids";
-import type { AccountDoc, DiscoveryItemDoc, MeetingAnalysisDoc, MeetingDoc, OpportunityDoc, SuggestionDoc } from "@/server/db/types";
+import type { AccountDoc, MeetingAnalysisDoc, MeetingDoc, OpportunityDoc, SuggestionDoc } from "@/server/db/types";
 import { NotFoundError, ValidationError } from "@/server/http/errors";
 import { getEnumerations } from "./settings";
 
@@ -86,6 +83,7 @@ export interface AnalysisData {
   account: AccountDoc;
   opportunities: OpportunityDoc[];
   contactNames: string[];
+  championNames: string[];
   enums: Enumerations;
 }
 
@@ -93,89 +91,36 @@ export async function loadAnalysisData(meeting: MeetingDoc): Promise<AnalysisDat
   const c = await collections();
   const [account, opportunities, contacts, enums] = await Promise.all([
     c.accounts.findOne({ _id: meeting.accountId }),
-    c.opportunities.find({ accountId: meeting.accountId }).sort({ updatedAt: -1 }).toArray(),
-    c.contacts.find({ accountId: meeting.accountId }, { projection: { name: 1 } }).toArray(),
+    c.opportunities.find({ accountId: meeting.accountId }, { projection: { name: 1 } }).toArray(),
+    c.contacts.find({ accountId: meeting.accountId }, { projection: { name: 1, isChampion: 1 } }).toArray(),
     getEnumerations(),
   ]);
   if (!account) throw new NotFoundError("Account");
-  return { meeting, account, opportunities, contactNames: contacts.map((x) => x.name), enums };
+  return {
+    meeting,
+    account,
+    opportunities: opportunities as OpportunityDoc[],
+    contactNames: contacts.map((x) => x.name),
+    championNames: contacts.filter((x) => x.isChampion).map((x) => x.name),
+    enums,
+  };
 }
-
-const clip = (s: string, n = 400) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
 export async function buildContext(data: AnalysisData, transcript: string): Promise<MeetingContextInput> {
   const c = await collections();
-  const { meeting, account, opportunities, enums } = data;
-
-  const profile: MeetingContextInput["profile"] = [];
-  for (const [fieldKey, items] of Object.entries(account.techStack ?? {})) {
-    if (items.length) profile.push({ scope: "account", opportunityId: null, fieldKey, items: items.map((i) => ({ id: i.id, text: clip(i.text), status: i.status })) });
-  }
-  for (const opp of opportunities) {
-    for (const [fieldKey, items] of Object.entries(opp.discovery ?? {})) {
-      if (items.length && DISCOVERY_FIELD_MAP.get(fieldKey)?.kind !== "mermaid") {
-        profile.push({
-          scope: "opportunity",
-          opportunityId: opp._id.toHexString(),
-          fieldKey,
-          items: items.map((i) => ({ id: i.id, text: clip(i.text), status: i.status })),
-        });
-      }
-    }
-  }
-
-  const [openTasks, previous] = await Promise.all([
-    c.actionItems.find({ accountId: account._id, status: { $ne: "done" } }, { projection: { title: 1 } }).limit(50).toArray(),
-    c.meetings.findOne(
-      { accountId: account._id, _id: { $ne: meeting._id }, startsAt: { $lte: meeting.startsAt }, latestAnalysisId: { $ne: null } },
-      { sort: { startsAt: -1 }, projection: { title: 1, startsAt: 1, summary: 1, latestAnalysisId: 1 } },
-    ),
-  ]);
-  let previousMeeting: MeetingContextInput["previousMeeting"] = null;
-  if (previous?.latestAnalysisId) {
-    const prevAnalysis = await c.meetingAnalyses.findOne({ _id: previous.latestAnalysisId }, { projection: { output: 1 } });
-    previousMeeting = {
-      title: previous.title,
-      date: previous.startsAt.toISOString().slice(0, 10),
-      summary: previous.summary ?? prevAnalysis?.output.summary ?? null,
-      decisions: prevAnalysis?.output.decisions.map((d) => d.text) ?? [],
-      openQuestions: prevAnalysis?.output.openQuestions.map((q) => q.text) ?? [],
-    };
-  }
-
+  const { meeting, account, enums } = data;
+  const openTasks = await c.actionItems
+    .find({ accountId: account._id, status: { $ne: "done" } }, { projection: { title: 1 } })
+    .limit(50)
+    .toArray();
   return {
-    meeting: {
-      title: meeting.title,
-      date: meeting.startsAt.toISOString().slice(0, 10),
-      type: meeting.type,
-      participants: meeting.participants,
-    },
-    account: { name: account.name, industry: account.industry, region: account.region },
-    opportunities: opportunities.map((o) => ({
-      id: o._id.toHexString(),
-      name: o.name,
-      classification: {
-        salesMotion: o.salesMotion,
-        tigerRoute: o.tigerRoute,
-        stage: o.stage,
-        businessPriority: o.businessPriority,
-        technicalComplexity: o.technicalComplexity,
-      },
-    })),
-    focusOpportunityId: idString(meeting.opportunityId),
-    profile,
-    contacts: data.contactNames,
+    meeting: { title: meeting.title, date: meeting.startsAt.toISOString().slice(0, 10), type: meeting.type, participants: meeting.participants },
+    account: { name: account.name, industry: account.industry },
+    opportunities: data.opportunities.map((o) => o.name),
+    knownContacts: data.contactNames.map((n) => (data.championNames.includes(n) ? `${n} (champion)` : n)),
+    currentFeatures: (account.features ?? []).map((f) => f.capability),
     openActionItems: openTasks.map((t) => t.title),
-    configured: {
-      salesMotions: enums.salesMotions,
-      tigerRoutes: enums.tigerRoutes,
-      stages: enums.opportunityStages,
-      priorities: enums.priorities,
-      complexities: enums.complexities,
-      capabilities: enums.mongodbCapabilities,
-      personas: enums.contactPersonas,
-    },
-    previousMeeting,
+    configuredCapabilities: enums.mongodbCapabilities,
     transcript,
   };
 }
@@ -184,174 +129,92 @@ export async function buildContext(data: AnalysisData, transcript: string): Prom
 // Suggestions
 // ---------------------------------------------------------------------------
 
-const CLASSIFICATION_ENUM: Record<ClassificationField, EnumerationKind> = {
-  salesMotion: "salesMotions",
-  tigerRoute: "tigerRoutes",
-  stage: "opportunityStages",
-  businessPriority: "priorities",
-  technicalComplexity: "complexities",
-};
-
-function findItem(doc: { discovery?: Record<string, DiscoveryItemDoc[]>; techStack?: Record<string, DiscoveryItemDoc[]> }, id: string) {
-  const values = doc.discovery ?? doc.techStack ?? {};
-  for (const items of Object.values(values)) {
-    const found = items.find((i) => i.id === id);
-    if (found) return found;
-  }
-  return null;
-}
-
-/** Turns raw model output into reviewable suggestions with current values, conflicts and evidence ranges. */
+/** Turns model output into reviewable suggestions, skipping what the account already has. */
 export function buildSuggestions(output: MeetingAnalysisOutput, data: AnalysisData, raw: string): SuggestionDoc[] {
-  const { meeting, account, opportunities, enums } = data;
-  const oppById = new Map(opportunities.map((o) => [o._id.toHexString(), o]));
-  const resolveOpp = (id: string | null): OpportunityDoc | null =>
-    (id && oppById.get(id)) ||
-    (meeting.opportunityId && oppById.get(meeting.opportunityId.toHexString())) ||
-    (opportunities.length === 1 ? opportunities[0] : null);
-
-  const base = (partial: Omit<SuggestionDoc, "id" | "status" | "editedValue" | "resolution" | "reviewedAt">): SuggestionDoc => ({
+  const { meeting, account, enums } = data;
+  type Defaulted = "id" | "status" | "editedValue" | "resolution" | "reviewedAt" | "relation" | "relatedItemId" | "kind" | "conflict" | "scope" | "fieldKey";
+  const base = (partial: Omit<SuggestionDoc, Defaulted> & Partial<Pick<SuggestionDoc, Defaulted>>): SuggestionDoc => ({
     id: randomUUID(),
     status: "pending",
     editedValue: null,
     resolution: null,
     reviewedAt: null,
+    relation: "new",
+    relatedItemId: null,
+    kind: "fact",
+    conflict: false,
+    scope: "account",
+    fieldKey: null,
     ...partial,
   });
 
   const suggestions: SuggestionDoc[] = [];
-
-  for (const u of output.discoveryUpdates) {
-    // Repair a wrong scope if the key exists in the other one.
-    const scope: DiscoveryScope = getFieldDef(u.fieldKey, u.scope) ? u.scope : u.scope === "account" ? "opportunity" : "account";
-    const def = getFieldDef(u.fieldKey, scope);
-    if (!def || !u.value.trim()) continue;
-    const opp = scope === "opportunity" ? resolveOpp(u.opportunityId) : null;
-    const target = scope === "account" ? account : opp;
-    const existing = target ? ((scope === "account" ? account.techStack : opp?.discovery)?.[def.key] ?? []) : [];
-    const related = u.relatedItemId && target ? findItem(scope === "account" ? { techStack: account.techStack } : { discovery: opp!.discovery }, u.relatedItemId) : null;
-    const relation: Relation = related ? u.relation : u.relation === "confirms" || u.relation === "resolves" ? "new" : u.relation;
-    if (relation === "confirms" && related?.status === "confirmed" && related.text.trim() === u.value.trim()) continue;
-
-    suggestions.push(
-      base({
-        type: "discovery",
-        label: def.label,
-        scope,
-        fieldKey: def.key,
-        opportunityId: opp?._id ?? null,
-        value: u.value.trim(),
-        details: {},
-        kind: u.kind,
-        confidence: u.confidence,
-        relation,
-        relatedItemId: related?.id ?? null,
-        existingValue: related ? related.text : existing.length ? existing.map((i) => i.text).join("\n") : null,
-        conflict: relation === "conflicts" || (def.kind !== "list" && existing.length > 0 && relation !== "confirms"),
-        blocker: scope === "opportunity" && !opp ? "Choose the opportunity this belongs to" : null,
-        evidence: evidenceOf(raw, u.evidence),
-      }),
-    );
-  }
-
-  for (const s of output.classificationSuggestions) {
-    const opp = resolveOpp(s.opportunityId);
-    const current = opp ? opp[s.field] : null;
-    if (current && current === s.value) continue;
-    const configured = enums[CLASSIFICATION_ENUM[s.field]].includes(s.value);
-    suggestions.push(
-      base({
-        type: "classification",
-        label: CLASSIFICATION_LABELS[s.field],
-        scope: "opportunity",
-        fieldKey: s.field,
-        opportunityId: opp?._id ?? null,
-        value: s.value,
-        details: { rationale: s.rationale },
-        kind: "recommendation",
-        confidence: s.confidence,
-        relation: current ? "updates" : "new",
-        relatedItemId: null,
-        existingValue: current,
-        conflict: !!current,
-        blocker: !opp ? "Choose the opportunity this belongs to" : !configured ? `"${s.value}" is not a configured value — edit it or reject` : null,
-        evidence: evidenceOf(raw, s.evidence),
-      }),
-    );
-  }
+  const openTitles = new Set<string>();
 
   for (const a of output.actionItems) {
-    if (!a.title.trim()) continue;
-    const opp = a.opportunityId ? oppById.get(a.opportunityId) ?? null : meeting.opportunityId ? oppById.get(meeting.opportunityId.toHexString()) ?? null : null;
+    const title = a.title.trim();
+    if (!title || openTitles.has(title.toLowerCase())) continue;
+    openTitles.add(title.toLowerCase());
     const due = a.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(a.dueDate) && !Number.isNaN(Date.parse(a.dueDate)) ? a.dueDate : null;
     suggestions.push(
       base({
         type: "action_item",
         label: "Action item",
-        scope: opp ? "opportunity" : "account",
-        fieldKey: null,
-        opportunityId: opp?._id ?? null,
-        value: a.title.trim(),
+        opportunityId: meeting.opportunityId,
+        value: title,
         details: { owner: a.owner, dueDate: due },
-        kind: "fact",
         confidence: "high",
-        relation: "new",
-        relatedItemId: null,
         existingValue: null,
-        conflict: false,
         blocker: null,
         evidence: evidenceOf(raw, a.evidence),
       }),
     );
   }
 
-  for (const m of output.mongodbOpportunities) {
-    const opp = resolveOpp(m.opportunityId);
-    const already = opp?.solutionFit?.find((e) => e.capability.toLowerCase() === m.capability.toLowerCase());
-    if (already) continue;
-    const configured = enums.mongodbCapabilities.includes(m.capability);
+  const known = new Map(data.contactNames.map((n) => [n.trim().toLowerCase(), n]));
+  const champions = new Set(data.championNames.map((n) => n.trim().toLowerCase()));
+  const seenPeople = new Set<string>();
+  for (const p of output.champions) {
+    const name = p.name.trim();
+    const key = name.toLowerCase();
+    if (!name || champions.has(key) || seenPeople.has(key)) continue;
+    seenPeople.add(key);
     suggestions.push(
       base({
-        type: "solution_fit",
-        label: "Solution fit",
-        scope: "opportunity",
-        fieldKey: null,
-        opportunityId: opp?._id ?? null,
-        value: m.capability,
-        details: { problem: m.problem, justification: m.justification },
-        kind: "recommendation",
-        confidence: m.confidence,
-        relation: "new",
-        relatedItemId: null,
-        existingValue: null,
-        conflict: false,
-        blocker: !opp ? "Choose the opportunity this belongs to" : !configured ? `"${m.capability}" is not a configured capability — edit it or reject` : null,
-        evidence: evidenceOf(raw, m.evidence),
+        type: "champion",
+        label: "Technical champion",
+        opportunityId: null,
+        value: name,
+        details: { title: p.title, role: p.role },
+        confidence: "high",
+        // An existing contact is promoted to champion instead of being duplicated.
+        existingValue: known.has(key) ? `${known.get(key)} (existing contact)` : null,
+        blocker: null,
+        evidence: evidenceOf(raw, p.evidence),
       }),
     );
   }
 
-  const known = new Set(data.contactNames.map((n) => n.toLowerCase()));
-  for (const p of output.contacts) {
-    if (!p.name.trim() || known.has(p.name.trim().toLowerCase())) continue;
-    known.add(p.name.trim().toLowerCase());
+  const current = new Set((account.features ?? []).map((f) => f.capability.toLowerCase()));
+  const seenFeatures = new Set<string>();
+  for (const f of output.features) {
+    const configured = enums.mongodbCapabilities.find((c) => c.toLowerCase() === f.capability.trim().toLowerCase());
+    const capability = configured ?? f.capability.trim();
+    const key = capability.toLowerCase();
+    if (!capability || current.has(key) || seenFeatures.has(key)) continue;
+    seenFeatures.add(key);
     suggestions.push(
       base({
-        type: "contact",
-        label: "Contact",
-        scope: "account",
-        fieldKey: null,
+        type: "feature",
+        label: "MongoDB feature",
         opportunityId: null,
-        value: p.name.trim(),
-        details: { title: p.title, persona: p.persona && enums.contactPersonas.includes(p.persona) ? p.persona : null },
-        kind: "fact",
-        confidence: "high",
-        relation: "new",
-        relatedItemId: null,
+        value: capability,
+        details: { why: f.why },
+        kind: "recommendation",
+        confidence: "medium",
         existingValue: null,
-        conflict: false,
-        blocker: null,
-        evidence: evidenceOf(raw, p.evidence),
+        blocker: configured ? null : `"${capability}" is not a configured capability — edit it or reject`,
+        evidence: evidenceOf(raw, f.evidence),
       }),
     );
   }
@@ -372,7 +235,7 @@ export function mapAnalysis(doc: MeetingAnalysisDoc): MeetingAnalysis {
     provider: doc.provider,
     model: doc.model,
     promptVersion: doc.promptVersion,
-    output: doc.output,
+    output: doc.output as StoredAnalysisOutput,
     suggestions: doc.suggestions.map((s) => ({ ...s, opportunityId: idString(s.opportunityId) })),
     createdAt: doc.createdAt,
   };
